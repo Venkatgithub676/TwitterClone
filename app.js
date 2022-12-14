@@ -114,7 +114,7 @@ app.get("/user/tweets/feed/", verifyToken, async (request, response) => {
 app.get("/user/following/", verifyToken, async (request, response) => {
   const selectUser = `select * from user where username = '${request.username}';`;
   const dbR = await db.get(selectUser);
-  const selectUsers = `select username from follower INNER JOIN user on follower.following_user_id = user.user_id where follower.follower_user_id = ${dbR.user_id}`;
+  const selectUsers = `select name from follower INNER JOIN user on follower.following_user_id = user.user_id where follower.follower_user_id = ${dbR.user_id}`;
   const dbResponse = await db.all(selectUsers);
   console.log(dbResponse);
   response.send(dbResponse);
@@ -123,8 +123,30 @@ app.get("/user/following/", verifyToken, async (request, response) => {
 app.get("/user/followers/", verifyToken, async (request, response) => {
   const selectUser = `select * from user where username = '${request.username}';`;
   const dbR = await db.get(selectUser);
-  const selectUsers = `select username from follower INNER JOIN user on follower.follower_user_id = user.user_id where following_user_id = ${dbR.user_id}`;
+  const selectUsers = `select name from follower INNER JOIN user on follower.follower_user_id = user.user_id where following_user_id = ${dbR.user_id}`;
   const dbResponse = await db.all(selectUsers);
   response.send(dbResponse);
+});
+
+app.get("/tweets/:tweetId/", verifyToken, async (request, response) => {
+  const { username } = request;
+  const { tweetId } = request.params;
+  const selectUserQuery = `select * from user where username = '${username}';`;
+  const dbR = await db.get(selectUserQuery);
+  const userFollowingPeopleTweets = `select * from follower 
+  INNER JOIN tweet on follower.following_user_id=tweet.user_id where follower.follower_user_id = ${dbR.user_id} and tweet.tweet_id = ${tweetId};`;
+  const dbResponse = await db.get(userFollowingPeopleTweets);
+  if (dbResponse != undefined) {
+    const tweetRepliesAndLikes = `select tweet,count(like_id) as likes,count(reply) as replies, date_time as dateTime from tweet 
+      LEFT JOIN reply on tweet.tweet_id = reply.tweet_id
+      LEFT JOIN like on tweet.tweet_id = like.tweet_id where tweet.tweet_id = ${tweetId};`;
+    const dbResponse1 = await db.get(tweetRepliesAndLikes);
+    response.send(dbResponse1);
+  } else {
+    response.status(401);
+    response.send("Invalid Request");
+  }
+
+  //console.log(dbResponse);
 });
 module.exports = app;
