@@ -27,7 +27,11 @@ initializeDBAndServer();
 // verifying jwtToken API
 
 const verifyToken = (request, response, next) => {
-  const jwtToken = request.headers["authorization"];
+  let jwtToken;
+  const authHeader = request.headers["authorization"];
+  if (authHeader != undefined) {
+    jwtToken = authHeader.split(" ")[1];
+  }
   if (jwtToken === undefined) {
     response.status(401);
     response.send("Invalid JWT Token");
@@ -37,6 +41,7 @@ const verifyToken = (request, response, next) => {
         response.status(401);
         response.send("Invalid JWT Token");
       } else {
+        request.username = payload.username;
         next();
       }
     });
@@ -91,22 +96,15 @@ app.post("/login/", async (request, response) => {
 });
 
 // get tweets of the following api
-const convertToObject = (dR) => {
-  return {
-    name: dR.name,
-    username: dR.username,
-    tweet: dR.tweet,
-    dateTime: dR.date_time,
-  };
-};
 
 app.get("/user/tweets/feed/", verifyToken, async (request, response) => {
-  const getQuery = `select username,tweet,date_time as dateTime from (user INNER JOIN follower on user.user_id = follower.follower_user_id) as user1 
-  INNER JOIN tweet on follower.following_user_id = tweet.user_id group by username order by dateTime desc limit 4 ;`;
+  const selectUser = `select * from user where username = '${request.username}';`;
+  const dbR = await db.get(selectUser);
+  const getQuery = `select username,tweet,date_time as dateTime from follower
+  INNER JOIN user on user.user_id = follower.following_user_id 
+  INNER JOIN tweet on follower.following_user_id = tweet.user_id where follower.follower_user_id = ${dbR.user_id} order by dateTime desc limit 4 ;`;
   const dbResponse = await db.all(getQuery);
-  const result = dbResponse.map((dR) => {
-    return convertToObject(dR);
-  });
+
   console.log(dbResponse);
   response.send(dbResponse);
 });
@@ -114,16 +112,19 @@ app.get("/user/tweets/feed/", verifyToken, async (request, response) => {
 // user follows people names api
 
 app.get("/user/following/", verifyToken, async (request, response) => {
-  const selectUsers = `select name from follower INNER JOIN user on follower.following_user_id = user.user_id `;
+  const selectUser = `select * from user where username = '${request.username}';`;
+  const dbR = await db.get(selectUser);
+  const selectUsers = `select username from follower INNER JOIN user on follower.following_user_id = user.user_id where follower.follower_user_id = ${dbR.user_id}`;
   const dbResponse = await db.all(selectUsers);
   console.log(dbResponse);
   response.send(dbResponse);
 });
 
-app.get("/user/followers/", async (request, responsoe) => {
-  const selectUsers = `select name from follower INNER JOIN user on follower.following_user_id = user.user_id `;
+app.get("/user/followers/", verifyToken, async (request, response) => {
+  const selectUser = `select * from user where username = '${request.username}';`;
+  const dbR = await db.get(selectUser);
+  const selectUsers = `select username from follower INNER JOIN user on follower.follower_user_id = user.user_id where following_user_id = ${dbR.user_id}`;
   const dbResponse = await db.all(selectUsers);
-  console.log(dbResponse);
   response.send(dbResponse);
 });
 module.exports = app;
